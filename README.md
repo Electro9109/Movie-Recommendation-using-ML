@@ -22,66 +22,54 @@ A movie recommendation engine built on the [MovieLens 20M dataset](https://www.k
 
 - Python 3.10+
 - ~8 GB RAM (collaborative filtering is memory-optimized with sampling + sparse matrices)
+- Database: `data/movie_review.db` (2.9 GB, **already initialized**)
 
 ## Installation & Setup
 
-### 1. Clone and Install Dependencies
+### 1. Install Dependencies
 
 ```bash
-git clone <your-repo-url>
-cd movie_review
 pip install -r requirements.txt
 ```
 
-### 2. Download Dataset from Kaggle
+### 2. Database is Ready!
 
-The dataset is hosted at: **https://www.kaggle.com/datasets/aravind100k/20m-combined-db**
+The SQLite database (`data/movie_review.db`) is **already initialized** with 41.8 million clean records:
+- 62,423 movies
+- 25 million user ratings
+- 1.1 million user tags
+- 15.5 million genome scores (tag relevance)
+- IMDB/TMDB links
 
-#### Option A: Automated Setup (Recommended)
-
-**Windows (PowerShell):**
-```powershell
-.\setup.ps1
-```
-
-**Windows (Command Prompt):**
-```cmd
-setup.bat
-```
-
-**Mac/Linux:**
-```bash
-python download_data.py
-```
-
-#### Option B: Manual Download Script
-
-```bash
-# Install Kaggle API first
-pip install kaggle
-
-# Set up Kaggle credentials:
-# 1. Go to https://www.kaggle.com/settings/account
-# 2. Click "Create New API Token"
-# 3. Move kaggle.json to ~/.kaggle/kaggle.json
-# 4. On Mac/Linux: chmod 600 ~/.kaggle/kaggle.json
-
-# Download the dataset
-python download_data.py
-```
-
-#### Option C: Manual Download from Website
-
-1. Visit: https://www.kaggle.com/datasets/aravind100k/20m-combined-db
-2. Click **Download** button
-3. Extract the zip file
-4. Place the `.db` file in the `data/` folder
-
-For detailed setup instructions, see [DOWNLOAD.md](DOWNLOAD.md)
+**No download needed!** The data is cleaned, deduplicated, and validated.
 
 ---
 
 ## Usage
+
+### Data Access (Programmatic)
+
+```python
+from src.data_loader import create_connection, get_top_rated_movies, search_movies
+
+conn = create_connection()
+
+# Get top rated movies
+top_movies = get_top_rated_movies(conn, limit=10)
+
+# Search for movies
+results = search_movies(conn, "inception")
+
+# Get user ratings
+from src.data_loader import get_user_rated_movies
+user_movies = get_user_rated_movies(conn, user_id=1, limit=20)
+
+# Get similar movies
+from src.data_loader import get_similar_movies_by_tags
+similar = get_similar_movies_by_tags(conn, movie_id=603, limit=10)
+```
+
+See [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md) for more examples.
 
 ### Interactive Recommendation CLI
 
@@ -121,39 +109,47 @@ python main.py hidden-gems Sci-Fi     # Filtered by genre
 python main.py hidden-gems Comedy     # Any genre works
 ```
 
+### Verify Database
+
+```bash
+python verify_database.py   # Check data integrity & statistics
+python test_database.py     # Test all query functions
+```
+
 ---
 
 ## Project Structure
 
 ```
 movie_review/
-├── main.py                      # CLI entry point
-├── requirements.txt             # Python dependencies
-├── README.md                    # This file
-├── STRUCTURE.md                 # Detailed project structure guide
-├── SETUP.md                     # Setup and next steps
-├── DOWNLOAD.md                  # Data download guide
+├── main.py                           # CLI entry point
+├── requirements.txt                  # Python dependencies
+├── README.md                         # This file
+├── SETUP_COMPLETE.md                 # Database initialization summary
+├── DATABASE_REPORT.md                # Detailed data report
+├── DATABASE_QUICKSTART.md            # Query examples & patterns
 │
-├── download_data.py             # Download dataset from Kaggle
-├── setup.ps1                    # Windows PowerShell setup script
-├── setup.bat                    # Windows batch setup script
+├── load_data.py                      # Reload database from CSVs (if needed)
+├── verify_database.py                # Check database integrity
+├── test_database.py                  # Test query functions
 │
-├── src/                         # Source code package
+├── src/                              # Source code package
 │   ├── __init__.py
-│   ├── data_loader.py           # SQLite data loading & movie lookup
-│   ├── eda.py                   # Exploratory data analysis with plots
+│   ├── data_loader.py                # SQLite queries & 10+ helper functions
+│   ├── eda.py                        # Exploratory data analysis with plots
 │   │
-│   └── recommenders/            # Recommendation engines subpackage
+│   └── recommenders/                 # Recommendation engines subpackage
 │       ├── __init__.py
-│       ├── collab_recommender.py        # Truncated SVD collaborative filtering
-│       ├── content_recommender.py       # Genre + tag TF-IDF cosine similarity
-│       ├── hidden_gems.py               # Bayesian average + popularity penalty
-│       └── hybrid_recommender.py        # Combined engine & interactive CLI
+│       ├── collab_recommender.py     # Truncated SVD collaborative filtering
+│       ├── content_recommender.py    # Genre + tag TF-IDF cosine similarity
+│       ├── hidden_gems.py            # Bayesian average + popularity penalty
+│       └── hybrid_recommender.py     # Combined engine & interactive CLI
 │
-├── data/                        # Data directory
-│   └── movie_review.db          # SQLite database (download via setup script)
+├── data/                             # Data directory
+│   ├── movie_review.db               # SQLite database (2.9 GB, ready to use)
+│   └── *.csv                         # Source CSVs (for reference/reload only)
 │
-└── outputs/                     # Analysis outputs
+└── outputs/                          # Analysis outputs
     ├── popularity_distribution.png
     ├── rating_distribution.png
     └── user_activity_distribution.png
@@ -204,23 +200,32 @@ Default α = 0.3 (favors collaborative since the dataset has 20M ratings).
 
 ## Dataset
 
-| Table | Rows | Columns |
+| Table | Records | Status |
 |---|---|---|
-| `movies` | 27,278 | `movieId`, `title`, `genres` |
-| `ratings` | 20,000,263 | `userId`, `movieId`, `rating`, `timestamp` |
-| `tags` | 465,548 | `userId`, `movieId`, `tag`, `timestamp` |
+| `movies` | 62,423 | ✓ All unique, clean |
+| `ratings` | 25,000,095 | ✓ Deduplicated by user+movie |
+| `user_tags` | 1,093,344 | ✓ Nulls removed |
+| `links` | 62,423 | ✓ IMDB/TMDB IDs |
+| `genome_tags` | 1,128 | ✓ Reference tags |
+| `genome_scores` | 15,584,448 | ✓ Tag relevance scores |
+| **TOTAL** | **41.8M** | ✓ Clean & validated |
+
+**Database**: `data/movie_review.db` (2.9 GB, SQLite)  
+**Status**: Ready to use — no further setup needed
 
 ---
 
 ## Performance Notes
 
-| Operation | Time | RAM |
+| Operation | Time | Notes |
 |---|---|---|
-| Data loading (all 20M ratings) | ~4 min | ~2 GB |
-| Content feature building | ~6 sec | ~200 MB |
-| Collaborative model training (7M sample) | ~3 min | ~3-4 GB peak |
-| Hidden gems scoring | ~1 sec | minimal |
-| Individual query (after models loaded) | instant | — |
+| Data loading | instant | Already in SQLite database |
+| Query indexed columns | <100ms | Fast with indexes on userId, movieId |
+| Query genome_scores (full) | 5-30s | 15.5M record full scans are expected |
+| Content feature building | ~6 sec | One-time, on-demand |
+| Collaborative model training | ~3 min | First run, cached afterward |
+| Hidden gems scoring | ~1 sec | Real-time queries |
+| Individual recommendation | instant | After models are cached |
 
 ---
 
@@ -231,7 +236,19 @@ Default α = 0.3 (favors collaborative since the dataset has 20M ratings).
 - **scipy** — sparse matrices
 - **numpy** — numerical operations
 - **matplotlib** — EDA visualizations
-- **sqlite3** — database access
+- **sqlite3** — database access (built-in)
+
+---
+
+## Database Status
+
+✅ **Fully Initialized & Validated**
+
+- All CSV data loaded and deduplicated
+- Foreign key constraints verified
+- 0 orphaned records
+- Performance indexes created
+- See [SETUP_COMPLETE.md](SETUP_COMPLETE.md) for details
 
 ---
 
@@ -243,14 +260,27 @@ This project uses the [MovieLens 20M dataset](https://grouplens.org/datasets/mov
 
 ## Troubleshooting
 
-### "Kaggle credits not found" error
+### "No module named 'src'" error
 
-**Solution:**
-1. Install Kaggle API: `pip install kaggle`
-2. Go to https://www.kaggle.com/settings/account
-3. Create a new API token (downloads `kaggle.json`)
-4. Move to: `~/.kaggle/kaggle.json`
-5. On Mac/Linux: `chmod 600 ~/.kaggle/kaggle.json`
+**Solution**: Run from the project root directory:
+```bash
+cd path/to/movie_review
+python main.py recommend
+```
+
+### "Database file not found"
+
+**Solution**: The database file should be at `data/movie_review.db`. If missing, reload it:
+```bash
+python load_data.py  # Requires CSV files in data/ folder
+```
+
+### Import errors for pandas, numpy, etc.
+
+**Solution**: Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
 See [DOWNLOAD.md](DOWNLOAD.md) for detailed troubleshooting.
 

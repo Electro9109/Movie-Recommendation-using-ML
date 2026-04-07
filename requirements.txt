@@ -1,6 +1,13 @@
+# Data Processing & Analysis
 numpy>=2.0
 pandas>=2.0
-scikit-learn>=1.5
 scipy>=1.12
+
+# Machine Learning
+scikit-learn>=1.5
+
+# Visualization
 matplotlib>=3.8
+
+# Data Download (optional, only for reloading)
 kaggle>=1.5.0
